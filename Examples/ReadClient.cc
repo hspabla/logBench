@@ -156,7 +156,6 @@ int
 main(int argc, char** argv)
 {
     try {
-
         OptionParser options(argc, argv);
         LogCabin::Client::Debug::setLogPolicy(
             LogCabin::Client::Debug::logPolicyFromString(
@@ -164,18 +163,15 @@ main(int argc, char** argv)
         Cluster cluster(options.cluster);
         Tree tree = cluster.getTree();
         tree.setTimeout(options.timeout);
-        tree.makeDirectoryEx("/test");
         auto start = std::chrono::steady_clock::now();
-        tree.writeEx("/test/file_1", "helloWorld!");
+        std::string contents = tree.readEx("/test/file_1");
         auto end = std::chrono::steady_clock::now();
         auto diff = end - start;
-        std::cout << "write time: "
+
+        std::cout << contents << std::endl;
+        std::cout << "Read time: "
                   << std::chrono::duration <double, std::milli> (diff).count()
                   << " ms" << std::endl;
-        //std::string contents = tree.readEx("/test/file_1");
-
-        //assert(contents == "helloWorld!");
-        //tree.removeDirectoryEx("/test");
         return 0;
 
     } catch (const LogCabin::Client::Exception& e) {
