@@ -1,4 +1,5 @@
-/* Copyright (c) 2012 Stanford University
+/*
+Copyright (c) 2012 Stanford University
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,6 +18,9 @@
 #include <getopt.h>
 #include <iostream>
 #include <chrono>
+#include <cstdlib>
+#include <stdlib.h>
+#include <string>
 
 #include <LogCabin/Client.h>
 #include <LogCabin/Debug.h>
@@ -39,17 +43,21 @@ class OptionParser {
         , cluster("logcabin:5254")
         , logPolicy("")
         , timeout(parseNonNegativeDuration("0s"))
+        , writeOption(1)
+        , numberOfWrites(1)
     {
         while (true) {
             static struct option longOptions[] = {
                {"cluster",  required_argument, NULL, 'c'},
+               {"writeOption", required_argument, NULL, 'w'},
+               {"numberOfWrites", required_argument, NULL, 'n'},
                {"help",  no_argument, NULL, 'h'},
                {"timeout",  required_argument, NULL, 't'},
                {"verbose",  no_argument, NULL, 'v'},
                {"verbosity",  required_argument, NULL, 256},
                {0, 0, 0, 0}
             };
-            int c = getopt_long(argc, argv, "c:t:hv", longOptions, NULL);
+            int c = getopt_long(argc, argv, "c:w:n:t:hv", longOptions, NULL);
 
             // Detect the end of the options.
             if (c == -1)
@@ -58,6 +66,12 @@ class OptionParser {
             switch (c) {
                 case 'c':
                     cluster = optarg;
+                    break;
+                case 'w':
+                    writeOption = atoi(optarg);
+                    break;
+                case 'n':
+                    numberOfWrites = atoi(optarg);
                     break;
                 case 't':
                     timeout = parseNonNegativeDuration(optarg);
@@ -110,6 +124,15 @@ class OptionParser {
             << "                                         "
             << "[default: logcabin:5254]"
             << std::endl
+            << "                                "
+
+            << "  -w, --writeOption             "
+            << "1 for Write to Same file, 2 for Write to different files, 3 for Write to Same and different files"
+            << std::endl
+            << "                                 "
+            << "  -n, --numberOfWrites           "
+            << "Number of writes to file"
+            << std::endl
 
             << "  -h, --help                     "
             << "Print this usage information"
@@ -148,6 +171,8 @@ class OptionParser {
     std::string cluster;
     std::string logPolicy;
     uint64_t timeout;
+    int writeOption;
+    int numberOfWrites = 0;
 };
 
 } // anonymous namespace
@@ -165,17 +190,33 @@ main(int argc, char** argv)
         Tree tree = cluster.getTree();
         tree.setTimeout(options.timeout);
         tree.makeDirectoryEx("/test");
+        int numOfWrites = options.numberOfWrites;
         auto start = std::chrono::steady_clock::now();
-        tree.writeEx("/test/file_1", "helloWorld!");
+
+        if(options.writeOption == 1) {
+            for(int i=0; i < numOfWrites; i++)
+                tree.writeEx("/test/fileSame", "testValue");
+        } else if(options.writeOption == 2) {
+            for(int i=0; i< numOfWrites; i++) {
+                std::string fileNum = std::to_string(i);
+                tree.writeEx("/test/fileDiff_" + fileNum, fileNum); 
+            }
+        } else if(options.writeOption == 3) {
+            int randMax = (numOfWrites > 10) ? (numOfWrites / 10) : 1;
+            for(int i=0; i< numOfWrites; i++) {
+               std::string fileNum = std::to_string(rand() % randMax + 1);
+                tree.writeEx("/test/fileSAndD_" + fileNum, std::to_string(i));
+            }
+        } else {
+           std::cout << "Wrong write option" << std::endl;
+           exit(-1);
+        }
+
         auto end = std::chrono::steady_clock::now();
         auto diff = end - start;
         std::cout << "write time: "
                   << std::chrono::duration <double, std::milli> (diff).count()
                   << " ms" << std::endl;
-        //std::string contents = tree.readEx("/test/file_1");
-
-        //assert(contents == "helloWorld!");
-        //tree.removeDirectoryEx("/test");
         return 0;
 
     } catch (const LogCabin::Client::Exception& e) {

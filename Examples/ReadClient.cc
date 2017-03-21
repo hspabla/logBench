@@ -17,6 +17,9 @@
 #include <getopt.h>
 #include <iostream>
 #include <chrono>
+#include <stdlib.h>
+#include <cstdlib>
+#include <string>
 
 #include <LogCabin/Client.h>
 #include <LogCabin/Debug.h>
@@ -39,17 +42,21 @@ class OptionParser {
         , cluster("logcabin:5254")
         , logPolicy("")
         , timeout(parseNonNegativeDuration("0s"))
+        , readOption(1)
+        , numberOfReads(1)
     {
         while (true) {
             static struct option longOptions[] = {
                {"cluster",  required_argument, NULL, 'c'},
+               {"readOption", required_argument, NULL, 'w'},
+               {"numberOfReads", required_argument, NULL, 'n'},
                {"help",  no_argument, NULL, 'h'},
                {"timeout",  required_argument, NULL, 't'},
                {"verbose",  no_argument, NULL, 'v'},
                {"verbosity",  required_argument, NULL, 256},
                {0, 0, 0, 0}
             };
-            int c = getopt_long(argc, argv, "c:t:hv", longOptions, NULL);
+            int c = getopt_long(argc, argv, "c:w:n:t:hv", longOptions, NULL);
 
             // Detect the end of the options.
             if (c == -1)
@@ -58,6 +65,12 @@ class OptionParser {
             switch (c) {
                 case 'c':
                     cluster = optarg;
+                    break;
+                case 'w':
+                    readOption = atoi(optarg);
+                    break;
+                case 'n':
+                    numberOfReads = atoi(optarg);
                     break;
                 case 't':
                     timeout = parseNonNegativeDuration(optarg);
@@ -110,6 +123,14 @@ class OptionParser {
             << "                                         "
             << "[default: logcabin:5254]"
             << std::endl
+            << "                                         "
+            << "  -r, --readOption=<option>  "
+            << "Enter 1 for reading from same file, 2 for different files, 3 for mix of same and different files"
+            << std::endl
+            << "                                "
+            << "  -n, --numberOfReads=<number>  "
+            << "Number of reads to be made"
+            << std::endl
 
             << "  -h, --help                     "
             << "Print this usage information"
@@ -148,12 +169,13 @@ class OptionParser {
     std::string cluster;
     std::string logPolicy;
     uint64_t timeout;
+    int readOption;
+    int numberOfReads = 0;
 };
 
 } // anonymous namespace
 
-int
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
     try {
         OptionParser options(argc, argv);
@@ -164,11 +186,36 @@ main(int argc, char** argv)
         Tree tree = cluster.getTree();
         tree.setTimeout(options.timeout);
         auto start = std::chrono::steady_clock::now();
-        std::string contents = tree.readEx("/test/file_1");
+        int numOfReads = options.numberOfReads;
+
+        if(options.readOption == 1) {
+           for(int i=0; i < numOfReads; i++) {
+               //std::string contents = tree.readEx("/test/fileSame");
+               tree.readEx("/test/fileSame");
+               //std::cout << contents << std::endl;
+           }
+        } else if(options.readOption == 2) {
+           for(int i=0; i< numOfReads; i++) {
+               std::string fileNum = std::to_string(i);
+               //std::string contents = tree.readEx("/test/fileDiff_" + fileNum);
+               tree.readEx("/test/fileDiff_" + fileNum);
+               //std::cout << contents << std::endl;
+           }
+        } else if(options.readOption == 3) {
+           int randMax = (numOfReads > 10) ? (numOfReads / 10) : 1;
+           for(int i=0; i< numOfReads; i++) {
+               std::string fileNum = std::to_string(rand() % randMax + 1);
+               tree.readEx("/test/fileSAndD_" + fileNum);
+               //std::cout << contents << std::endl;
+           }
+        } else {
+           std::cout << "Wrong input for readOption" << std::endl;
+           exit(-1);
+        }
+
         auto end = std::chrono::steady_clock::now();
         auto diff = end - start;
 
-        std::cout << contents << std::endl;
         std::cout << "Read time: "
                   << std::chrono::duration <double, std::milli> (diff).count()
                   << " ms" << std::endl;
